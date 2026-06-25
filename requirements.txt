@@ -1,0 +1,8 @@
+mineru[all]
+fastapi>=0.104
+uvicorn>=0.24
+python-multipart
+httpx>=0.25
+beautifulsoup4
+python-docx
+pillow

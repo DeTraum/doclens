@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocLens - 本地文档转换</title>
+<style>
+  :root {
+    --bg: #FAFAF8; --surface: #FFFFFF; --border: #E8E6E1;
+    --text: #1D1D1F; --text-secondary: #6E6E73;
+    --accent: #3B82F6; --accent-hover: #2563EB;
+    --success: #22C55E; --warning: #F59E0B; --error: #EF4444;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh;
+  }
+
+  /* ---- Network Banner ---- */
+  .net-banner {
+    padding: 10px 32px; font-size: 13px; text-align: center;
+    display: none; transition: all 0.3s;
+  }
+  .net-banner.offline { background: #F0FDF4; color: #166534; display: block; }
+  .net-banner.online  { background: #FFFBEB; color: #92400E; display: block; }
+
+  /* ---- Header ---- */
+  .header {
+    padding: 20px 32px; display: flex; align-items: center;
+    justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--surface);
+  }
+  .header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .header h1 span { color: var(--accent); }
+  .privacy-badge {
+    display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--success);
+    background: #F0FDF4; padding: 6px 12px; border-radius: 20px; border: 1px solid #BBF7D0;
+  }
+
+  /* ---- Main ---- */
+  .main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ---- Mode Tabs ---- */
+  .mode-tabs {
+    display: flex; gap: 4px; background: #F1F1EF; padding: 4px;
+    border-radius: 10px; margin-bottom: 24px; width: fit-content;
+  }
+  .mode-tab {
+    padding: 10px 24px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    cursor: pointer; border: none; background: transparent; color: var(--text-secondary);
+    transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .mode-tab.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+  .mode-tab .dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+  .mode-tab .dot.green { background: var(--success); }
+  .mode-tab .dot.yellow { background: var(--warning); }
+
+  /* ---- Mode Panels ---- */
+  .mode-panel { display: none; }
+  .mode-panel.active { display: block; }
+
+  /* ---- Upload Zone ---- */
+  .upload-zone {
+    border: 2px dashed var(--border); border-radius: var(--radius); padding: 56px 32px;
+    text-align: center; cursor: pointer; transition: all 0.2s; background: var(--surface);
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent); background: #F8FAFF;
+  }
+  /* 已选文件后：上传区缩小+变绿，状态明显 */
+  .upload-zone.has-files {
+    padding: 24px 32px; border-style: solid; border-color: var(--success, #16a34a);
+    background: #F0FDF4;
+  }
+  .upload-zone.has-files .upload-icon { font-size: 22px; margin-bottom: 6px; }
+  .upload-icon { font-size: 32px; margin-bottom: 12px; }
+  .upload-zone h3 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-zone p { font-size: 13px; color: var(--text-secondary); }
+  .upload-zone input { display: none; }
+
+  /* 分隔线"或" */
+  .or-divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 24px 0 14px; color: var(--text-secondary); font-size: 13px;
+  }
+  .or-divider::before, .or-divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--border, #e5e7eb);
+  }
+
+  /* ---- Feishu Panel ---- */
+  .feishu-input-group {
+    background: var(--surface); border-radius: var(--radius); padding: 24px;
+    box-shadow: var(--shadow);
+  }
+  .feishu-input-group h3 { font-size: 15px; font-weight: 500; margin-bottom: 16px; }
+  .url-input-row { display: flex; gap: 12px; }
+  .url-input {
+    flex: 1; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; outline: none; transition: border 0.2s;
+  }
+  .url-input:focus { border-color: var(--accent); }
+  .url-input::placeholder { color: #B0B0B0; }
+
+  .feishu-config {
+    margin-top: 16px; padding: 16px; background: #FAFAF8; border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .feishu-config summary {
+    font-size: 13px; color: var(--text-secondary); cursor: pointer;
+    user-select: none;
+  }
+  .feishu-config .config-fields { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .feishu-config input {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; outline: none; font-family: monospace;
+  }
+  .feishu-config input:focus { border-color: var(--accent); }
+  .config-row { display: flex; gap: 8px; align-items: center; }
+  .config-row label { font-size: 13px; color: var(--text-secondary); min-width: 90px; }
+  .config-row input { flex: 1; }
+
+  .feishu-status {
+    margin-top: 12px; font-size: 13px; padding: 8px 12px; border-radius: 6px;
+  }
+  .feishu-status.ok { background: #F0FDF4; color: #166534; }
+  .feishu-status.error { background: #FEF2F2; color: #991B1B; }
+  .feishu-status.pending { background: #FFFBEB; color: #92400E; }
+
+  .feishu-hint {
+    margin-top: 16px; font-size: 12px; color: var(--text-secondary); line-height: 1.8;
+  }
+
+  /* ---- Options Bar ---- */
+  .options-bar {
+    display: flex; align-items: center; gap: 16px; margin-top: 20px;
+    padding: 16px 20px; background: var(--surface); border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .options-bar label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+  .options-bar select {
+    padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; background: var(--bg); cursor: pointer; outline: none;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+  }
+  .btn:hover { background: var(--bg); box-shadow: var(--shadow); }
+  .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { background: #CBD5E1; border-color: #CBD5E1; cursor: not-allowed; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; }
+  .btn-convert { margin-left: auto; padding: 10px 28px; }
+
+  /* ---- File List ---- */
+  .file-list { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .file-list:not(:empty) { margin-top: 14px; }
+  .file-chip {
+    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font-size: 13px;
+  }
+  .file-chip img { width: 32px; height: 32px; object-fit: cover; border-radius: 4px; }
+  .file-chip .remove { cursor: pointer; color: var(--text-secondary); font-size: 16px; }
+  .file-chip .remove:hover { color: var(--error); }
+
+  /* ---- Progress ---- */
+  .progress-section {
+    margin-top: 24px; padding: 24px; background: var(--surface);
+    border-radius: var(--radius); box-shadow: var(--shadow); display: none;
+  }
+  .progress-section.active { display: block; }
+  .progress-bar-track {
+    height: 4px; background: #E2E8F0; border-radius: 2px; overflow: hidden; margin-top: 12px;
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--accent); border-radius: 2px;
+    transition: width 0.3s; animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
+  .progress-text { font-size: 14px; color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+  .spinner {
+    width: 16px; height: 16px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---- Result ---- */
+  .result-section { margin-top: 24px; display: none; }
+  .result-section.active { display: block; }
+  .result-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .result-header h2 { font-size: 18px; font-weight: 600; }
+  .result-stats { display: flex; gap: 16px; font-size: 13px; color: var(--text-secondary); }
+  .result-stats span strong { color: var(--text); font-weight: 600; }
+  .result-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 500px; }
+  .panel {
+    background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .panel-header {
+    padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    border-bottom: 1px solid var(--border); background: #FAFAF8;
+  }
+  .panel-body { padding: 16px; flex: 1; overflow: auto; }
+  .panel-body img { max-width: 100%; border-radius: 8px; }
+  .panel-body textarea {
+    width: 100%; height: 100%; min-height: 460px; border: none; outline: none; resize: none;
+    font-family: "SF Mono","Fira Code","Consolas",monospace; font-size: 13px;
+    line-height: 1.7; color: var(--text); background: transparent;
+  }
+
+  /* ---- Feishu Result Link ---- */
+  .feishu-result-link {
+    margin-top: 16px; padding: 16px 20px; background: #EFF6FF; border: 1px solid #BFDBFE;
+    border-radius: var(--radius); display: none;
+  }
+  .feishu-result-link.active { display: flex; align-items: center; justify-content: space-between; }
+  .feishu-result-link .label { font-size: 14px; color: #1E40AF; font-weight: 500; }
+  .feishu-result-link a {
+    color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 500;
+  }
+  .feishu-result-link a:hover { text-decoration: underline; }
+
+  /* ---- 配置向导弹窗 ---- */
+  .wizard-mask { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:100; }
+  .wizard-mask.active { display:flex; align-items:center; justify-content:center; }
+  .wizard { background:var(--surface,#fff); width:min(680px,92vw); max-height:88vh; overflow:auto; border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,0.3); }
+  .wizard-head { position:sticky; top:0; background:var(--surface,#fff); display:flex; align-items:center; gap:12px; padding:18px 22px; border-bottom:1px solid var(--border,#eee); }
+  .wizard-head h2 { font-size:18px; font-weight:600; flex:1; }
+  .wizard-close { font-size:24px; line-height:1; background:none; border:none; cursor:pointer; color:var(--text-secondary,#888); }
+  .wizard-body { padding:14px 22px 24px; }
+  .wz-step { display:flex; gap:14px; padding:16px 0; border-bottom:1px dashed var(--border,#eee); }
+  .wz-no { flex:none; width:28px; height:28px; border-radius:50%; background:var(--accent,#2563eb); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:14px; }
+  .wz-content { flex:1; }
+  .wz-content b { font-size:15px; }
+  .wz-content p { font-size:13px; color:var(--text-secondary,#666); margin:6px 0; line-height:1.6; }
+  .wz-tip { font-size:12px; color:var(--text-secondary,#999); }
+  .wz-btn { display:inline-block; margin:4px 0; font-size:13px; color:var(--accent,#2563eb); text-decoration:none; border:1px solid var(--accent,#2563eb); padding:5px 12px; border-radius:6px; }
+  .wz-copyrow { display:flex; align-items:center; gap:8px; margin:6px 0; }
+  .wz-copyrow code { flex:1; background:var(--bg,#f5f5f5); padding:6px 10px; border-radius:6px; font-size:13px; word-break:break-all; }
+  .wz-copyrow button { font-size:12px; padding:5px 10px; border:1px solid var(--border,#ddd); border-radius:6px; background:none; cursor:pointer; white-space:nowrap; }
+  .wizard .config-row { display:flex; align-items:center; gap:10px; margin:8px 0; }
+  .wizard .config-row label { width:80px; font-size:13px; }
+  .wizard .config-row input { flex:1; padding:7px 10px; border:1px solid var(--border,#ddd); border-radius:6px; font-size:13px; }
+
+  /* ---- Action Bar (吸底固定，无需滚到底即可操作) ---- */
+  .action-bar {
+    position: sticky; bottom: 0; z-index: 20;
+    margin-top: 16px; padding: 12px 4px;
+    display: flex; gap: 12px; justify-content: flex-end; flex-wrap: wrap;
+    background: var(--surface, #fff);
+    border-top: 1px solid var(--border, #e5e7eb);
+    box-shadow: 0 -4px 12px rgba(0,0,0,0.04);
+  }
+
+  /* ---- Toast ---- */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+    background: var(--text); color: white; border-radius: 8px; font-size: 14px;
+    opacity: 0; transform: translateY(8px); transition: all 0.3s; z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="net-banner" id="netBanner"></div>
+
+<div class="header">
+  <h1><span>Doc</span>Lens</h1>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span id="authStatus" style="display:none;font-size:13px;color:var(--text-secondary)"></span>
+    <button onclick="openWizard()" style="font-size:13px;color:var(--accent,#2563eb);background:none;cursor:pointer;border:1px solid var(--border,#ddd);padding:5px 12px;border-radius:6px">⚙️ 配置飞书</button>
+    <button id="btnAuth" onclick="handleAuth()" style="font-size:13px;color:var(--accent,#2563eb);background:none;cursor:pointer;border:1px solid var(--border,#ddd);padding:5px 12px;border-radius:6px">登录飞书</button>
+    <a id="indexLink" href="#" target="_blank" style="display:none;font-size:13px;color:var(--accent,#2563eb);text-decoration:none;border:1px solid var(--border,#ddd);padding:5px 12px;border-radius:6px">📊 我的转换记录</a>
+    <div class="privacy-badge">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      本地运行 · 数据不出设备
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- Mode Tabs -->
+  <div class="mode-tabs">
+    <button class="mode-tab active" data-mode="local">
+      <span class="dot green"></span> 本地上传
+    </button>
+    <button class="mode-tab" data-mode="feishu">
+      <span class="dot yellow"></span> 飞书链接
+    </button>
+    <button class="mode-tab" data-mode="article">
+      <span class="dot yellow"></span> 公众号文章
+    </button>
+  </div>
+
+  <!-- ==================== 本地上传模式 ==================== -->
+  <div class="mode-panel active" id="panelLocal">
+    <!-- 单图上传区：文件直接显示在框内(合并为一个区域) -->
+    <div class="upload-zone" id="uploadZone">
+      <div id="uploadPrompt">
+        <div class="upload-icon">📄</div>
+        <h3>将图片拖到这里，或点击上传</h3>
+        <p>支持 PNG / JPG / BMP / TIFF，可粘贴截图 (Ctrl+V / Cmd+V)</p>
+      </div>
+      <div class="file-list" id="fileList"></div>
+      <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.bmp,.tiff,.tif" multiple>
+    </div>
+
+    <div class="options-bar" id="localOptions">
+      <label>输出格式</label>
+      <select id="formatSelect">
+        <option value="md">Markdown (.md)</option>
+        <option value="docx">Word (.docx)</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="dewatermarkChk"> 去图片水印(浅色)
+      </label>
+      <label>去水印词</label>
+      <input type="text" id="watermarkInput" placeholder="如 白日梦 (可选,兜底)"
+             style="flex:1;min-width:120px;padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+      <button class="btn btn-primary btn-convert" id="btnLocalConvert">开始转换</button>
+    </div>
+
+    <!-- 分隔线 + 批量(也是大区域) -->
+    <div class="or-divider"><span>或，批量转换整个文件夹</span></div>
+    <div class="upload-zone batch-zone" id="folderZone">
+      <div class="upload-icon">📁</div>
+      <h3>点击选择文件夹，批量转换</h3>
+      <p>散放的图 = 各自一篇；子文件夹里的多张 = 合并成一篇。沿用上方输出格式 / 去水印设置。</p>
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+    </div>
+  </div>
+
+  <!-- ==================== 飞书链接模式 ==================== -->
+  <div class="mode-panel" id="panelFeishu">
+    <div class="feishu-input-group">
+      <h3>粘贴飞书文档链接</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+        从飞书文档中提取所有图片，本地 OCR 识别后生成新的可编辑飞书文档
+      </p>
+      <div class="url-input-row">
+        <input type="text" class="url-input" id="feishuUrl"
+               placeholder="https://xxx.feishu.cn/docx/xxxxx">
+        <button class="btn btn-primary" id="btnFeishuConvert">提取并转换</button>
+      </div>
+
+      <div class="feishu-hint">
+        首次使用需配置飞书（约10分钟，只做一次）。点右上角 <b>⚙️ 配置飞书</b> 按向导一步步操作。凭证仅存本机，不上传。
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 公众号文章模式 ==================== -->
+  <div class="mode-panel" id="panelArticle">
+    <div class="feishu-input-group">
+      <h3>粘贴公众号/网页文章链接</h3>
+      <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+        抓取文章原生内容(文字/图片/表格/列表)，生成新的可编辑飞书文档。无需 OCR，文字 100% 准确，图片为真实原图。
+      </p>
+      <div class="url-input-row">
+        <input type="text" class="url-input" id="articleUrl"
+               placeholder="https://mp.weixin.qq.com/s/xxxxx">
+        <button class="btn btn-primary" id="btnArticleConvert">抓取并转换</button>
+      </div>
+
+      <details style="margin-top:12px">
+        <summary style="cursor:pointer;font-size:14px;color:var(--accent,#2563eb)">📚 批量转换（多个链接 / 上传 txt）</summary>
+        <div style="margin-top:10px">
+          <textarea id="articleUrls" placeholder="每行一个文章链接，或点下方上传 txt"
+            style="width:100%;height:120px;padding:10px;border:1px solid var(--border,#ddd);border-radius:8px;font-size:13px;box-sizing:border-box"></textarea>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+            <button class="btn" onclick="$('urlsFile').click()">上传 txt</button>
+            <input type="file" id="urlsFile" accept=".txt" style="display:none">
+            <button class="btn btn-primary" id="btnArticlesBatch">批量转换</button>
+            <span style="font-size:12px;color:var(--text-secondary)">每篇间隔2秒，后台逐篇跑，结果进管理表</span>
+          </div>
+        </div>
+      </details>
+
+      <div class="feishu-hint">
+        需先配置并登录飞书（右上角）。复杂排版的精确颜色/样式可能简化，结构与图文表格会保留。
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 进度 ==================== -->
+  <div class="progress-section" id="progressSection">
+    <div class="progress-text">
+      <div class="spinner"></div>
+      <span id="progressText">准备中...</span>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="progressBar" style="width:10%"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 结果 ==================== -->
+  <div class="result-section" id="resultSection">
+    <div class="result-header">
+      <h2>转换结果</h2>
+      <div class="result-stats" id="resultStats"></div>
+    </div>
+
+    <div class="feishu-result-link" id="feishuResultLink">
+      <span class="label">📄 飞书文档已创建</span>
+      <a href="#" id="feishuDocLink" target="_blank">打开飞书文档 →</a>
+    </div>
+
+    <!-- 批量结果列表 -->
+    <div id="batchResult" style="display:none"></div>
+
+    <div class="result-panels" id="singleResult">
+      <div class="panel">
+        <div class="panel-header">原始图片</div>
+        <div class="panel-body" id="originalPanel"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header">识别结果 (可编辑)</div>
+        <div class="panel-body">
+          <textarea id="resultEditor" spellcheck="false"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="action-bar">
+      <button class="btn" id="btnCopy">复制 Markdown</button>
+      <button class="btn" id="btnDownloadMd">下载 .md</button>
+      <button class="btn" id="btnDownloadDocx">下载 .docx</button>
+      <button class="btn btn-primary" id="btnToFeishu">上传到飞书 (需联网)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== 飞书配置向导 ==================== -->
+<div id="wizardMask" class="wizard-mask" onclick="if(event.target===this)closeWizard()">
+  <div class="wizard">
+    <div class="wizard-head">
+      <h2>飞书配置向导</h2>
+      <span style="font-size:13px;color:var(--text-secondary)">约10分钟，只做一次</span>
+      <button class="wizard-close" onclick="closeWizard()">×</button>
+    </div>
+    <div class="wizard-body">
+
+      <div class="wz-step">
+        <div class="wz-no">1</div>
+        <div class="wz-content">
+          <b>创建飞书应用</b>
+          <p>打开飞书开放平台 → 创建「企业自建应用」（名字随便填）。</p>
+          <a class="wz-btn" href="https://open.feishu.cn/app" target="_blank">打开飞书开放平台 →</a>
+          <p class="wz-tip">创建后在「凭证与基础信息」页能看到 App ID 和 App Secret（第5步要用）。</p>
+        </div>
+      </div>
+
+      <div class="wz-step">
+        <div class="wz-no">2</div>
+        <div class="wz-content">
+          <b>开通 3 个权限</b>
+          <p>左侧「权限管理」，搜索并开通这三个（看清是<b>应用身份</b>可调用）：</p>
+          <div class="wz-copyrow"><code>docx:document</code><button onclick="copyTxt('docx:document')">复制</button></div>
+          <div class="wz-copyrow"><code>drive:drive</code><button onclick="copyTxt('drive:drive')">复制</button></div>
+          <div class="wz-copyrow"><code>bitable:app</code><button onclick="copyTxt('bitable:app')">复制</button></div>
+        </div>
+      </div>
+
+      <div class="wz-step">
+        <div class="wz-no">3</div>
+        <div class="wz-content">
+          <b>填回调地址</b>
+          <p>左侧「安全设置」→「重定向 URL」，原样粘贴这一行：</p>
+          <div class="wz-copyrow"><code id="wzRedirect">http://127.0.0.1:8910/api/auth/callback</code><button onclick="copyTxt(document.getElementById('wzRedirect').textContent)">复制</button></div>
+        </div>
+      </div>
+
+      <div class="wz-step">
+        <div class="wz-no">4</div>
+        <div class="wz-content">
+          <b>发布应用（重要！不发布权限不生效）</b>
+          <p>左侧「版本管理与发布」→ 创建版本（版本号随便填）→ 申请发布 → 若需管理员审核，去飞书管理后台通过。状态变「已发布」即可，等 1~2 分钟。</p>
+        </div>
+      </div>
+
+      <div class="wz-step">
+        <div class="wz-no">5</div>
+        <div class="wz-content">
+          <b>填入凭证并验证</b>
+          <div class="config-row"><label>App ID</label><input type="text" id="feishuAppId" placeholder="cli_xxxxx"></div>
+          <div class="config-row"><label>App Secret</label><input type="password" id="feishuAppSecret" placeholder="输入 App Secret"></div>
+          <button class="btn btn-sm btn-primary" id="btnSaveConfig">保存并验证</button>
+          <div class="feishu-status pending" id="feishuStatus">未配置</div>
+        </div>
+      </div>
+
+      <div class="wz-step">
+        <div class="wz-no">6</div>
+        <div class="wz-content">
+          <b>登录飞书（让文档归你所有）</b>
+          <p>验证成功后点下面登录，跳转飞书点「同意」即可。之后生成的文档/表格都归你、在你云盘、可编辑。</p>
+          <button class="btn btn-sm btn-primary" onclick="window.location.href='/api/auth/login'">🔑 登录飞书</button>
+          <span id="wzAuthState" style="margin-left:10px;font-size:13px;color:var(--success,#16a34a)"></span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let selectedFiles = [];
+let currentResult = null;
+let currentTaskId = null;
+let currentMode = 'local';
+let isOnline = false;
+
+const $ = id => document.getElementById(id);
+
+// ============================================================
+// Mode Switching
+// ============================================================
+document.querySelectorAll('.mode-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const mode = tab.dataset.mode;
+    currentMode = mode;
+
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    document.querySelectorAll('.mode-panel').forEach(p => p.classList.remove('active'));
+    $('panel' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+
+    // 切到本地模式时更新网络提示
+    updateNetBanner();
+  });
+});
+
+// ============================================================
+// Network Status
+// ============================================================
+async function checkNetwork() {
+  try {
+    const res = await fetch('/api/network');
+    const data = await res.json();
+    isOnline = data.online;
+    updateNetBanner();
+  } catch { isOnline = false; }
+}
+
+async function loadIndexLink() {
+  try {
+    const h = await (await fetch('/api/health')).json();
+    if (h.index_url) {
+      const el = $('indexLink');
+      el.href = h.index_url;
+      el.style.display = '';
+    }
+  } catch {}
+}
+loadIndexLink();
+
+let authed = false;
+async function loadAuthStatus() {
+  try {
+    const s = await (await fetch('/api/auth/status')).json();
+    authed = s.logged_in;
+    if (s.logged_in) {
+      $('authStatus').style.display = '';
+      $('authStatus').textContent = '👤 ' + (s.name || '已登录');
+      $('btnAuth').textContent = '退出';
+    } else {
+      $('authStatus').style.display = 'none';
+      $('btnAuth').textContent = '登录飞书';
+    }
+  } catch {}
+}
+async function handleAuth() {
+  if (authed) {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    await loadAuthStatus();
+    showToast('已退出登录');
+  } else {
+    window.location.href = '/api/auth/login';
+  }
+}
+loadAuthStatus();
+
+// ---- 配置向导 ----
+function openWizard() {
+  $('wizardMask').classList.add('active');
+  // 同步已保存的配置状态
+  fetch('/api/feishu/config').then(r => r.json()).then(d => {
+    if (d.configured) {
+      $('feishuStatus').className = 'feishu-status ok';
+      $('feishuStatus').textContent = '已配置 ' + (d.app_id_masked || '');
+    }
+  }).catch(() => {});
+  fetch('/api/auth/status').then(r => r.json()).then(s => {
+    $('wzAuthState').textContent = s.logged_in ? ('✅ 已登录：' + (s.name || '')) : '';
+  }).catch(() => {});
+}
+function closeWizard() { $('wizardMask').classList.remove('active'); }
+async function copyTxt(t) {
+  try { await navigator.clipboard.writeText(t); showToast('已复制：' + t); }
+  catch { showToast('复制失败，请手动选中'); }
+}
+
+function updateNetBanner() {
+  const banner = $('netBanner');
+  if (currentMode === 'local') {
+    if (isOnline) {
+      banner.className = 'net-banner online';
+      banner.textContent = '⚠️ 当前网络已连接 — 本地模式下建议断开 WiFi 以保护隐私，OCR 模型已缓存，断网不影响使用';
+    } else {
+      banner.className = 'net-banner offline';
+      banner.textContent = '🔒 离线模式 — 所有处理在本机完成，数据不会离开你的设备';
+    }
+  } else {
+    if (isOnline) {
+      banner.className = 'net-banner offline';
+      banner.textContent = '🔗 飞书模式 — 仅与飞书服务器通信获取文档，OCR 识别仍在本机完成';
+    } else {
+      banner.className = 'net-banner online';
+      banner.textContent = '⚠️ 飞书模式需要网络连接 — 请开启 WiFi 以访问飞书文档';
+    }
+  }
+}
+
+checkNetwork();
+setInterval(checkNetwork, 10000);
+
+// ============================================================
+// Feishu Config
+// ============================================================
+$('btnSaveConfig').addEventListener('click', async () => {
+  const appId = $('feishuAppId').value.trim();
+  const appSecret = $('feishuAppSecret').value.trim();
+  if (!appId || !appSecret) { showToast('请填写完整的 App ID 和 App Secret'); return; }
+
+  const status = $('feishuStatus');
+  status.className = 'feishu-status pending';
+  status.textContent = '验证中...';
+
+  try {
+    const res = await fetch('/api/feishu/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app_id: appId, app_secret: appSecret }),
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      status.className = 'feishu-status ok';
+      status.textContent = '✅ ' + data.message;
+    } else {
+      status.className = 'feishu-status error';
+      status.textContent = '❌ ' + data.message;
+    }
+  } catch (err) {
+    status.className = 'feishu-status error';
+    status.textContent = '❌ 请求失败: ' + err.message;
+  }
+});
+
+// 启动时检查飞书配置
+(async () => {
+  try {
+    const res = await fetch('/api/feishu/config');
+    const data = await res.json();
+    const status = $('feishuStatus');
+    if (data.configured) {
+      status.className = 'feishu-status ok';
+      status.textContent = '✅ 已配置 (App ID: ' + data.app_id_masked + ')';
+    }
+  } catch {}
+})();
+
+// ============================================================
+// Local Upload
+// ============================================================
+const uploadZone = $('uploadZone');
+const fileInput = $('fileInput');
+
+uploadZone.addEventListener('click', e => {
+  // 点框内已选文件(缩略图/删除)时不触发选择框
+  if (e.target.closest('#fileList')) return;
+  fileInput.click();
+});
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e => handleFiles(e.target.files));
+
+// 批量文件夹大区域：点击/拖拽
+const folderZone = $('folderZone');
+folderZone.addEventListener('click', () => $('folderInput').click());
+
+document.addEventListener('paste', e => {
+  if (currentMode !== 'local') return;
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) handleFiles([new File([file], `clipboard_${Date.now()}.png`, { type: file.type })]);
+    }
+  }
+});
+
+function handleFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith('image/') && !f.name.match(/\.(png|jpe?g|bmp|tiff?)$/i)) continue;
+    selectedFiles.push(f);
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const c = $('fileList');
+  c.innerHTML = '';
+  selectedFiles.forEach((f, i) => {
+    const chip = document.createElement('div');
+    chip.className = 'file-chip';
+    // 多张时显示顺序号(=拼接顺序)
+    const order = selectedFiles.length > 1 ? `<b style="color:var(--accent,#2563eb);margin-right:4px">${i+1}.</b>` : '';
+    chip.innerHTML = `<img src="${URL.createObjectURL(f)}">${order}<span>${f.name}</span><span class="remove" data-i="${i}">&times;</span>`;
+    c.appendChild(chip);
+  });
+  if (selectedFiles.length > 1) {
+    const hint = document.createElement('div');
+    hint.style.cssText = 'width:100%;font-size:12px;color:var(--text-secondary);margin-top:4px';
+    hint.textContent = `📑 多张图将按上面 1→${selectedFiles.length} 的顺序合并为一篇`;
+    c.appendChild(hint);
+  }
+  c.querySelectorAll('.remove').forEach(el => {
+    el.addEventListener('click', e => {
+      selectedFiles.splice(parseInt(e.target.dataset.i), 1);
+      renderFileList();
+    });
+  });
+  // 选项栏常显(批量用户也要能选格式/去水印)；仅"开始转换"按钮在无单图时禁用
+  $('btnLocalConvert').style.display = selectedFiles.length > 0 ? '' : 'none';
+  // 上传区状态：选了文件就变绿、缩小、提示已选数量
+  const z = $('uploadZone'), n = selectedFiles.length;
+  if (n > 0) {
+    z.classList.add('has-files');
+    z.querySelector('h3').textContent = `✅ 已选 ${n} 张图片`;
+    z.querySelector('p').textContent = '点这里可继续添加；下方点「开始转换」';
+  } else {
+    z.classList.remove('has-files');
+    z.querySelector('h3').textContent = '将图片拖到这里，或点击上传';
+    z.querySelector('p').textContent = '支持 PNG / JPG / BMP / TIFF，可粘贴截图 (Ctrl+V / Cmd+V)';
+  }
+}
+
+// ============================================================
+// Convert - Local
+// ============================================================
+$('btnLocalConvert').addEventListener('click', async () => {
+  if (!selectedFiles.length) return;
+  const format = $('formatSelect').value;
+  if (format === 'feishu' && !await ensureFeishuReady()) return;
+  const multi = selectedFiles.length > 1;
+
+  showProgress(multi ? `正在上传 ${selectedFiles.length} 张图片(将合并为一篇)...` : '正在上传图片...', 10);
+  $('btnLocalConvert').disabled = true;
+
+  try {
+    const fd = new FormData();
+    // 多张按列表顺序全部上传，后端按顺序拼成一篇
+    selectedFiles.forEach(f => fd.append('file', f));
+    fd.append('output_format', format);
+    fd.append('watermark', $('watermarkInput').value.trim());
+    fd.append('dewatermark', $('dewatermarkChk').checked ? '1' : '');
+
+    const res = await fetch('/api/convert/local', { method: 'POST', body: fd });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { task_id } = await res.json();
+
+    showProgress('正在识别文档内容...', 30);
+    await pollTask(task_id, multi ? null : selectedFiles[0]);
+  } catch (err) {
+    showToast('转换失败: ' + err.message);
+    hideProgress();
+  } finally {
+    $('btnLocalConvert').disabled = false;
+  }
+});
+
+// ============================================================
+// 批量转换（选文件夹）
+// ============================================================
+$('folderInput').addEventListener('change', async (e) => {
+  const allow = ['png','jpg','jpeg','bmp','tiff','tif'];
+  const files = [...e.target.files].filter(f => allow.includes((f.name.split('.').pop()||'').toLowerCase()));
+  if (!files.length) { showToast('该文件夹里没有图片'); return; }
+
+  // 估算会生成几篇：散图各一篇 + 每个子文件夹一篇
+  const groups = new Set();
+  files.forEach(f => {
+    const segs = (f.webkitRelativePath || f.name).split('/');
+    groups.add(segs.length >= 3 ? segs[1] : '__one__/' + f.name);
+  });
+  // 批量输出到飞书前，先确认已配置(否则每篇都会失败)
+  if ($('formatSelect').value === 'feishu' && !await ensureFeishuReady()) { e.target.value = ''; return; }
+  const fmtName = {md:'Markdown', docx:'Word', feishu:'飞书文档'}[$('formatSelect').value] || $('formatSelect').value;
+  if (!confirm(`发现 ${files.length} 张图，将生成 ${groups.size} 篇（输出：${fmtName}）。\n开始批量转换？`)) {
+    e.target.value = ''; return;
+  }
+
+  showProgress(`正在上传 ${files.length} 张图...`, 8);
+  try {
+    const fd = new FormData();
+    const rels = [];
+    files.forEach(f => { fd.append('file', f); rels.push(f.webkitRelativePath || f.name); });
+    fd.append('rel_paths', JSON.stringify(rels));
+    fd.append('output_format', $('formatSelect').value);
+    fd.append('watermark', $('watermarkInput').value.trim());
+    fd.append('dewatermark', $('dewatermarkChk').checked ? '1' : '');
+
+    const res = await fetch('/api/convert/batch', { method: 'POST', body: fd });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { task_id } = await res.json();
+    showProgress('正在批量识别...', 20);
+    await pollTask(task_id, null);
+  } catch (err) {
+    showToast('批量转换失败: ' + err.message); hideProgress();
+  } finally {
+    e.target.value = '';
+  }
+});
+
+// 转飞书前确保「已配置 + 已登录」。未登录则提示登录——保证生成的文档归你账号所有
+async function ensureFeishuReady() {
+  try {
+    const h = await (await fetch('/api/health')).json();
+    if (!h.feishu_configured) {
+      showToast('请先配置飞书（已为你打开配置向导）');
+      openWizard();
+      return false;
+    }
+    const s = await (await fetch('/api/auth/status')).json();
+    if (!s.logged_in) {
+      if (confirm('为确保生成的文档归「你的飞书账号」所有，需要先登录飞书。\n现在登录？')) {
+        location.href = '/api/auth/login';
+      }
+      return false;
+    }
+  } catch {}
+  return true;
+}
+
+// ============================================================
+// Convert - Feishu
+// ============================================================
+$('btnFeishuConvert').addEventListener('click', async () => {
+  const url = $('feishuUrl').value.trim();
+  if (!url) { showToast('请粘贴飞书文档链接'); return; }
+  if (!url.includes('feishu.cn') && !url.includes('larksuite.com')) {
+    showToast('请输入有效的飞书文档链接'); return;
+  }
+  if (!await ensureFeishuReady()) return;
+
+  showProgress('解析飞书文档链接...', 10);
+  $('btnFeishuConvert').disabled = true;
+
+  try {
+    const res = await fetch('/api/convert/feishu', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { task_id } = await res.json();
+
+    showProgress('从飞书文档下载图片...', 20);
+    await pollTask(task_id, null);
+  } catch (err) {
+    showToast('转换失败: ' + err.message);
+    hideProgress();
+  } finally {
+    $('btnFeishuConvert').disabled = false;
+  }
+});
+
+// ---- 公众号文章转换 ----
+$('btnArticleConvert').addEventListener('click', async () => {
+  const url = $('articleUrl').value.trim();
+  if (!url) { showToast('请粘贴文章链接'); return; }
+  if (!url.startsWith('http')) { showToast('请输入有效的文章链接'); return; }
+  if (!await ensureFeishuReady()) return;
+
+  showProgress('抓取文章内容...', 10);
+  $('btnArticleConvert').disabled = true;
+
+  try {
+    const res = await fetch('/api/convert/article', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { task_id } = await res.json();
+
+    showProgress('解析并写入飞书文档...', 25);
+    await pollTask(task_id, null);
+  } catch (err) {
+    showToast('转换失败: ' + err.message);
+    hideProgress();
+  } finally {
+    $('btnArticleConvert').disabled = false;
+  }
+});
+
+// ---- 公众号批量 ----
+$('urlsFile').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  if (f) { $('articleUrls').value = await f.text(); }
+  e.target.value = '';
+});
+$('btnArticlesBatch').addEventListener('click', async () => {
+  const urls = $('articleUrls').value.trim();
+  if (!urls) { showToast('请粘贴链接或上传 txt'); return; }
+  const n = urls.split(/[\s,，;；]+/).filter(u => u.startsWith('http')).length;
+  if (!n) { showToast('没有有效链接'); return; }
+  if (!await ensureFeishuReady()) return;
+  if (!confirm(`共 ${n} 篇文章，将逐篇转换(每篇间隔2秒)。开始？`)) return;
+
+  showProgress(`批量转换 ${n} 篇...`, 10);
+  $('btnArticlesBatch').disabled = true;
+  try {
+    const res = await fetch('/api/convert/articles', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ urls }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { task_id } = await res.json();
+    await pollTask(task_id, null);
+  } catch (err) {
+    showToast('批量失败: ' + err.message); hideProgress();
+  } finally {
+    $('btnArticlesBatch').disabled = false;
+  }
+});
+
+// ============================================================
+// Poll Task
+// ============================================================
+async function pollTask(taskId, originalFile) {
+  let attempts = 0;
+  while (attempts < 1200) {  // 最长等20分钟，长图分段+上传飞书较慢
+    await sleep(1000);
+    attempts++;
+    try {
+      const res = await fetch(`/api/task/${taskId}`);
+      const task = await res.json();
+
+      if (task.status === 'completed') {
+        showProgress('转换完成!', 100);
+        await sleep(400);
+        showResult(task, originalFile);
+        return;
+      }
+      if (task.status === 'failed') throw new Error(task.progress);
+
+      const pct = Math.min(20 + attempts * 1.5, 90);
+      showProgress(task.progress || '处理中...', pct);
+    } catch (err) {
+      if (err.message.includes('失败')) { showToast(err.message); hideProgress(); return; }
+    }
+  }
+  showToast('处理超时'); hideProgress();
+}
+
+// ============================================================
+// Progress
+// ============================================================
+function showProgress(text, pct) {
+  $('progressSection').classList.add('active');
+  $('resultSection').classList.remove('active');
+  $('progressText').textContent = text;
+  $('progressBar').style.width = pct + '%';
+}
+function hideProgress() { $('progressSection').classList.remove('active'); }
+
+// ============================================================
+// Result
+// ============================================================
+function showResult(task, originalFile) {
+  hideProgress();
+  $('resultSection').classList.add('active');
+
+  // 批量：渲染文章列表
+  if (task.mode === 'batch') {
+    $('singleResult').style.display = 'none';
+    $('feishuResultLink').classList.remove('active');
+    document.querySelector('.action-bar').style.display = 'none';
+    const r = task.result, ok = r.items.filter(i => i.status === '完成').length;
+    $('resultStats').innerHTML = `<span>共 <strong>${r.total}</strong> 篇</span><span>成功 <strong>${ok}</strong></span>`;
+    let h = '<div style="max-height:60vh;overflow:auto">';
+    r.items.forEach((it, i) => {
+      let act = it.status;
+      if (it.feishu_url) act = `<a href="${it.feishu_url}" target="_blank" style="color:var(--accent,#2563eb)">打开飞书 →</a>`;
+      else if (it.md_file) act = `<a href="/api/download/${it.md_file}" style="color:var(--accent,#2563eb)">下载.md</a>` + (it.docx_file ? ` · <a href="/api/download/${it.docx_file}" style="color:var(--accent,#2563eb)">下载.docx</a>` : '');
+      else if (it.error) act = `<span style="color:#c00" title="${(it.error||'').replace(/"/g,'')}">失败</span>`;
+      const icon = it.status === '完成' ? '✅' : (it.status === '失败' ? '❌' : '⏳');
+      h += `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border,#eee)">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${icon} ${i+1}. ${it.title}</span>
+        <span style="flex-shrink:0">${act}</span></div>`;
+    });
+    h += '</div>';
+    $('batchResult').style.display = '';
+    $('batchResult').innerHTML = h;
+    return;
+  }
+  // 单篇：恢复正常布局
+  $('batchResult').style.display = 'none';
+  $('singleResult').style.display = '';
+  document.querySelector('.action-bar').style.display = '';
+
+  currentResult = task.result;
+  const s = task.result.stats;
+  let statsHtml = `<span>识别 <strong>${s.region_count}</strong> 个区域</span>
+                   <span>表格 <strong>${s.table_count}</strong> 个</span>`;
+  if (s.page_count) statsHtml += `<span>页数 <strong>${s.page_count}</strong></span>`;
+  if (s.elapsed) statsHtml = `<span>耗时 <strong>${s.elapsed}s</strong></span>` + statsHtml;
+  $('resultStats').innerHTML = statsHtml;
+
+  // 原图
+  if (originalFile) {
+    $('originalPanel').innerHTML = `<img src="${URL.createObjectURL(originalFile)}">`;
+  } else {
+    $('originalPanel').innerHTML = `<div style="padding:32px;text-align:center;color:var(--text-secondary)">
+      <p style="font-size:32px;margin-bottom:8px">📄</p>
+      <p>飞书文档 (${s.page_count || '?'} 张图片)</p></div>`;
+  }
+
+  $('resultEditor').value = task.result.markdown;
+
+  // 飞书文档链接
+  currentTaskId = task.id;
+  const linkEl = $('feishuResultLink');
+  if (task.result.feishu_url) {
+    linkEl.classList.add('active');
+    $('feishuDocLink').href = task.result.feishu_url;
+    $('btnToFeishu').style.display = 'none';
+  } else {
+    linkEl.classList.remove('active');
+    // 仅本地上传结果(还没飞书链接)显示"上传到飞书"按钮
+    $('btnToFeishu').style.display = (task.mode === 'local') ? '' : 'none';
+  }
+
+  $('btnDownloadDocx').style.display = task.result.docx_file ? '' : 'none';
+}
+
+// ============================================================
+// Actions
+// ============================================================
+$('btnCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('resultEditor').value); }
+  catch { $('resultEditor').select(); document.execCommand('copy'); }
+  showToast('已复制到剪贴板');
+});
+
+$('btnDownloadMd').addEventListener('click', () => {
+  if (!currentResult) return;
+  const blob = new Blob([$('resultEditor').value], { type: 'text/markdown;charset=utf-8' });
+  dl(blob, currentResult.md_file || 'result.md');
+});
+
+$('btnDownloadDocx').addEventListener('click', () => {
+  if (!currentResult?.docx_file) return;
+  window.open(`/api/download/${currentResult.docx_file}`);
+});
+
+$('btnToFeishu').addEventListener('click', async () => {
+  if (!currentTaskId) return;
+  if (!await ensureFeishuReady()) return;
+  $('btnToFeishu').disabled = true;
+  $('btnToFeishu').textContent = '正在上传飞书...';
+  try {
+    const res = await fetch(`/api/task/${currentTaskId}/to-feishu`, { method: 'POST' });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
+    const { feishu_url } = await res.json();
+    $('feishuResultLink').classList.add('active');
+    $('feishuDocLink').href = feishu_url;
+    $('btnToFeishu').style.display = 'none';
+    showToast('已上传到飞书');
+  } catch (err) {
+    showToast('上传失败: ' + err.message);
+  } finally {
+    $('btnToFeishu').disabled = false;
+    $('btnToFeishu').textContent = '上传到飞书 (需联网)';
+  }
+});
+
+function dl(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click(); URL.revokeObjectURL(a.href);
+}
+
+// ============================================================
+// Utils
+// ============================================================
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function showToast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>

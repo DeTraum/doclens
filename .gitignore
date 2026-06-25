@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Runtime data (uploads, outputs, logs)
+data/
+
+# Secrets (Feishu credentials)
+config.json
+
+# Claude / AI assistant
+.claude/
+
+# Distribution packages
+DocLens_*.zip
+DocLens_*.tar.gz
+DocLens_*.dmg
+*.tar.gz
+*.zip
