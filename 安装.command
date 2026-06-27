@@ -74,7 +74,11 @@ ok "依赖安装完成"
 
 # 4) 下载 OCR 模型（国内源，无需翻墙）
 echo "  [4/4] 下载 OCR 模型（约 1-2GB，仅首次）..."
-mineru-models-download -s modelscope -m pipeline 2>&1 | grep -E "Downloading model|successfully|completed" | tail -10
+if [ -f "$HOME/mineru.json" ]; then
+  ok "模型已下载，跳过"
+else
+  mineru-models-download -s modelscope -m pipeline 2>&1 | grep -E "Downloading model|successfully|completed" | tail -10
+fi
 ok "模型下载完成"
 
 echo ""

@@ -66,15 +66,14 @@ else
     echo "       安装方法: brew install pandoc"
 fi
 
-# ---- 预下载 OCR 模型 ----
-echo "  [5/5] 预下载 OCR 模型 (约 150MB, 仅首次)..."
-python3 -c "
-from paddleocr import PaddleOCR
-print('    下载 OCR 模型中...')
-ocr = PaddleOCR(use_angle_cls=True, lang='ch', show_log=False, use_gpu=False)
-print('    OCR 模型就绪')
-" 2>&1 | grep -E "(下载|就绪|Downloading)"
-ok "模型下载完成，后续可离线使用"
+# ---- 预下载 OCR 模型 (MinerU, 国内源) ----
+echo "  [5/5] 预下载 OCR 模型 (约 1-2GB, 仅首次, 较慢请耐心)..."
+if [ -f "$HOME/mineru.json" ]; then
+  ok "模型已下载，跳过"
+else
+  mineru-models-download -s modelscope -m pipeline 2>&1 | grep -E "Downloading model|successfully|completed" | tail -8
+  ok "模型下载完成，后续可离线使用"
+fi
 
 # ---- 完成 ----
 echo ""
