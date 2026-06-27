@@ -1076,7 +1076,9 @@ $('btnCopy').addEventListener('click', async () => {
 $('btnDownloadMd').addEventListener('click', () => {
   if (!currentResult) return;
   const blob = new Blob([$('resultEditor').value], { type: 'text/markdown;charset=utf-8' });
-  dl(blob, currentResult.md_file || 'result.md');
+  // 有标题就用标题当文件名(如 面试记录.md)，否则用默认
+  const name = currentResult.title ? currentResult.title + '.md' : (currentResult.md_file || 'result.md');
+  dl(blob, name);
 });
 
 $('btnDownloadDocx').addEventListener('click', () => {

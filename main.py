@@ -288,11 +288,20 @@ class FeishuClient:
         return ""
 
     async def _first_table_id(self, app_token: str, user: bool) -> str:
+        """返回"转换记录"表的 id；没有就新建一张(字段对齐)。避免误用默认空表。"""
+        hdr = self._user_headers() if user else self._tenant_headers()
         async with httpx.AsyncClient(timeout=30) as c:
-            r = await c.get(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables",
-                            headers=self._user_headers() if user else self._tenant_headers())
+            r = await c.get(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables", headers=hdr)
             items = r.json().get("data", {}).get("items", [])
-            return items[0]["table_id"] if items else ""
+            for t in items:
+                if t.get("name") == "转换记录":
+                    return t["table_id"]
+            # 没有"转换记录"表 -> 新建(字段: 标题/链接/来源/时间)
+            body = {"table": {"name": "转换记录", "fields": [
+                {"field_name": "标题", "type": 1}, {"field_name": "链接", "type": 15},
+                {"field_name": "来源", "type": 1}, {"field_name": "时间", "type": 1}]}}
+            r2 = await c.post(f"{self.BASE_URL}/bitable/v1/apps/{app_token}/tables", headers=hdr, json=body)
+            return r2.json().get("data", {}).get("table_id", "")
 
     def parse_doc_url(self, url: str) -> tuple[str, str]:
         """
